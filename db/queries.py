@@ -5,7 +5,7 @@ def get_horarios():
     try:
         conn = connect_db()
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM horarios")
+        cursor.execute("SELECT * FROM horarios WHERE estado = 1")
         resultados = cursor.fetchall()
         conn.close()
         return resultados
@@ -17,7 +17,7 @@ def get_servicios():
     try:
         conn = connect_db()
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM servicios")
+        cursor.execute("SELECT * FROM servicios WHERE estado = 1")
         resultados = cursor.fetchall()
         conn.close()
         return resultados
