@@ -91,3 +91,57 @@ def verificar_usuario_y_citas(email, telefono):
     except Exception as e:
         print(f"Error al verificar usuario: {e}")
         return None
+
+def get_horarios_disponibles(fecha):
+    """
+    Obtiene los horarios disponibles para una fecha específica
+    Args:
+        fecha: string en formato 'YYYY-MM-DD'
+    Returns:
+        dict con horarios_disponibles y horarios_ocupados
+    """
+    try:
+        conn = connect_db()
+        if not conn:
+            return None
+        
+        cursor = conn.cursor(dictionary=True)
+        
+        # Obtener TODOS los horarios activos del salón
+        query_todos = """
+            SELECT id, horaInicio, horaFin
+            FROM horarios
+            WHERE estado = 1
+            ORDER BY horaInicio ASC
+        """
+        cursor.execute(query_todos)
+        todos_horarios = cursor.fetchall()
+        
+        # Obtener horarios YA OCUPADOS en esa fecha (solo confirmadas)
+        query_ocupados = """
+            SELECT horarioID
+            FROM citas
+            WHERE fecha = %s
+            AND estado = 'confirmada'
+        """
+        cursor.execute(query_ocupados, (fecha,))
+        ocupados = cursor.fetchall()
+        
+        conn.close()
+        
+        # IDs de horarios ocupados
+        ids_ocupados = [h['horarioID'] for h in ocupados]
+        
+        # Separar disponibles de ocupados
+        horarios_disponibles = [h for h in todos_horarios if h['id'] not in ids_ocupados]
+        horarios_ocupados = [h for h in todos_horarios if h['id'] in ids_ocupados]
+        
+        return {
+            'disponibles': horarios_disponibles,
+            'ocupados': horarios_ocupados,
+            'fecha': fecha
+        }
+        
+    except Exception as e:
+        print(f"Error al obtener horarios disponibles: {e}")
+        return None
