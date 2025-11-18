@@ -11,7 +11,9 @@ from telegram.ext import (
 import google.generativeai as genai
 
 from context.context import build_context
-from db.queries import verificar_usuario_y_citas
+from context.gemini_utils import extraer_fecha_con_gemini
+from helpers.date_utils import es_domingo, es_fecha_pasada, formatear_fecha_legible
+from db.queries import verificar_usuario_y_citas, get_horarios_disponibles
 
 from dotenv import load_dotenv
 import os
@@ -32,6 +34,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("📍 Ubicación", callback_data='ubicacion')
         ],
         [
+            InlineKeyboardButton("🗓️ Consultar Horarios", callback_data='consultar_horarios')
+        ],
+        [
             InlineKeyboardButton("❓ Ayuda", callback_data='ayuda')
         ]
     ]
@@ -40,7 +45,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     mensaje = (
         "<b>¡Hola! 👋</b>\n\n"
         "Soy <i>LIZMAR BOT</i>, el asistente virtual del salón de belleza LIZMAR.\n\n"
-        "Selecciona una opción o escríbeme directamente lo que necesites:"
+        "Puedes:\n"
+        "• Usar los botones de abajo 👇\n"
+        "• Escribirme directamente 💬 \n\n"
+        "¿En qué puedo ayudarte hoy? 😊"
     )
     
     await update.message.reply_text(mensaje, reply_markup=reply_markup, parse_mode='HTML')
@@ -66,6 +74,13 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• \"¿Cuánto cuesta un corte?\"\n"
         "• \"¿Están abiertos mañana?\"\n"
         "• \"Quiero saber sobre los servicios\"\n\n"
+        
+        "<b>📅 Consultar disponibilidad:</b>\n"
+        "Pregúntame por horarios disponibles de forma natural:\n"
+        "• \"¿Qué horarios hay disponibles para mañana?\"\n"
+        "• \"Horarios libres el 25 de noviembre\"\n"
+        "• \"Disponibilidad para el próximo sábado\"\n"
+        "• \"¿Cuándo puedo agendar?\"\n\n"
         
         "<b>🔐 Consulta de citas:</b>\n"
         "Para ver tus citas programadas, usa /miscitas\n"
@@ -127,6 +142,41 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "📍 <b>Ubicación del Salón de Belleza LIZMAR:</b>\n\n"
             "El salón de belleza LIZMAR se encuentra ubicado en Avenida Barrientos, cerca de la intersección con la Calle Corneta Mamani, en la ciudad de Oruro - Bolivia.\n\n"
             "¡Te esperamos para brindarte el mejor servicio! 💇‍♀️✂️💅"
+        )
+    elif query.data == 'consultar_horarios':
+        mensaje = (
+            "🗓️ <b>Consulta de Horarios Disponibles</b>\n\n"
+            "Para consultar horarios disponibles, simplemente escríbeme mencionando la fecha:\n\n"
+            
+            "<b>📅 Formas de preguntar:</b>\n\n"
+            
+            "<i>Usando fechas relativas:</i>\n"
+            "• \"¿Hay horarios disponibles <b>mañana</b>?\"\n"
+            "• \"Disponibilidad para <b>pasado mañana</b>\"\n"
+            "• \"¿Tienes espacio <b>hoy</b>?\"\n\n"
+            
+            "<i>Usando días de la semana:</i>\n"
+            "• \"Horarios del <b>próximo sábado</b>\"\n"
+            "• \"¿Cuándo tienes libre <b>este viernes</b>?\"\n"
+            "• \"Disponibilidad el <b>martes</b>\"\n\n"
+            
+            "<i>Usando fechas específicas:</i>\n"
+            "• \"¿Hay horarios el <b>25 de noviembre</b>?\"\n"
+            "• \"Disponibilidad para el <b>19/11</b>\"\n"
+            "• \"Horarios del <b>15 de diciembre</b>\"\n\n"
+            
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            
+            "⚠️ <b>Importante:</b>\n"
+            "• El salón <b>NO atiende domingos</b> 🚫\n"
+            "• No puedo consultar fechas pasadas 📅\n"
+            "• Solo muestro disponibilidad, no agendo citas 📝\n\n"
+            
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            
+            "💡 <b>Tip:</b> Escríbeme de forma natural, yo entenderé tu pregunta.\n\n"
+            
+            "¿Qué fecha te interesa consultar? 😊"
         )
     else:
         mensaje = "⚠️ Opción no reconocida."
@@ -333,111 +383,41 @@ async def formaspago_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     await update.message.reply_text(texto_respuesta, parse_mode='HTML')
 
-### FUNCIÓN AUXILIAR: Extraer fecha con Gemini
-async def extraer_fecha_con_gemini(texto_usuario):
-    """
-    Usa Gemini para interpretar fechas en lenguaje natural
-    """
-    from datetime import datetime
-    
-    fecha_hoy = datetime.now().strftime('%Y-%m-%d')
-    dia_hoy = datetime.now().strftime('%A')
-    
-    # Traducir día actual al español
-    dias_es = {
-        'Monday': 'lunes', 'Tuesday': 'martes', 'Wednesday': 'miércoles',
-        'Thursday': 'jueves', 'Friday': 'viernes', 'Saturday': 'sábado', 'Sunday': 'domingo'
-    }
-    dia_hoy_es = dias_es.get(dia_hoy, dia_hoy)
-    
-    prompt = f"""
-Hoy es {dia_hoy_es} {fecha_hoy} (formato YYYY-MM-DD).
-
-El usuario escribió: "{texto_usuario}"
-
-Si el usuario está preguntando por horarios disponibles, disponibilidad o cuándo puede agendar, extrae la fecha mencionada.
-
-IMPORTANTE: 
-- Si dice "mañana", suma 1 día a {fecha_hoy}
-- Si dice "pasado mañana", suma 2 días
-- Si dice "hoy", usa {fecha_hoy}
-- Si dice un día de la semana (ej: "el sábado", "próximo martes"), calcula la fecha del próximo día que coincida
-- Si dice una fecha específica (ej: "25 de noviembre", "19/11"), convierte a formato YYYY-MM-DD
-
-Responde SOLO con este JSON (sin comentarios, sin markdown, sin texto adicional):
-{{"fecha": "YYYY-MM-DD", "encontrado": true}}
-
-Si NO menciona una fecha clara, responde:
-{{"fecha": null, "encontrado": false}}
-
-Ejemplos válidos:
-- "horarios para mañana" → {{"fecha": "2025-11-18", "encontrado": true}}
-- "disponibilidad el 25 de noviembre" → {{"fecha": "2025-11-25", "encontrado": true}}
-- "el próximo sábado" → {{"fecha": "2025-11-23", "encontrado": true}}
-- "hola" → {{"fecha": null, "encontrado": false}}
-"""
-    
-    try:
-        respuesta = modelo.generate_content(prompt)
-        texto = respuesta.text.strip()
-        
-        # Limpiar respuesta (quitar markdown si existe)
-        texto = texto.replace('```json', '').replace('```', '').strip()
-        
-        import json
-        resultado = json.loads(texto)
-        
-        return resultado
-    except Exception as e:
-        print(f"Error al extraer fecha: {e}")
-        print(f"Respuesta de Gemini: {texto if 'texto' in locals() else 'N/A'}")
-        return {"fecha": None, "encontrado": False}
-    
-### FUNCIÓN AUXILIAR: Validar si la fecha es domingo
-def es_domingo(fecha_str):
-    """
-    Verifica si una fecha es domingo
-    Args:
-        fecha_str: string en formato 'YYYY-MM-DD'
-    Returns:
-        bool: True si es domingo, False si no
-    """
-    from datetime import datetime
-    try:
-        fecha_obj = datetime.strptime(fecha_str, '%Y-%m-%d')
-        return fecha_obj.weekday() == 6  # 6 = Domingo
-    except:
-        return False
-    
-### RESPONDER MENSAJES (con detección de consulta de disponibilidad)
+### RESPONDER MENSAJES (versión simplificada)
 async def responder_mensaje(update: Update, context: ContextTypes.DEFAULT_TYPE):
     mensaje_usuario = update.message.text
     mensaje_lower = mensaje_usuario.lower()
     
     # Detectar si pregunta por disponibilidad/horarios libres
-    palabras_clave = ['disponible', 'disponibilidad', 'horario', 'libre', 'ocupado', 'agendar', 'cuando', 'cuándo']
+    palabras_clave = ['disponible', 'disponibilidad', 'horario', 'libre', 'ocupado', 'agendar', 'cuando', 'cuándo', 'espacio']
     
     if any(palabra in mensaje_lower for palabra in palabras_clave):
         await update.message.chat.send_action(action='typing')
         
-        # Intentar extraer fecha con Gemini
+        # ⭐ Usar función refactorizada
         resultado = await extraer_fecha_con_gemini(mensaje_usuario)
         
         if resultado['encontrado'] and resultado['fecha']:
             fecha = resultado['fecha']
             
-            # Validar si es domingo
+            # ⭐ Validar si es fecha pasada
+            if es_fecha_pasada(fecha):
+                await update.message.reply_text(
+                    f"❌ <b>La fecha ya pasó</b>\n\n"
+                    f"No puedes consultar horarios de fechas anteriores a hoy.\n\n"
+                    f"¿Te gustaría consultar otra fecha? 📅",
+                    parse_mode='HTML'
+                )
+                return
+            
+            # ⭐ Validar si es domingo
             if es_domingo(fecha):
-                from datetime import datetime
-                try:
-                    fecha_obj = datetime.strptime(fecha, '%Y-%m-%d')
-                    fecha_legible = fecha_obj.strftime('%d/%m/%Y')
-                except:
-                    fecha_legible = fecha
+                fecha_info = formatear_fecha_legible(fecha)
                 
                 await update.message.reply_text(
                     f"❌ <b>Los domingos el salón está cerrado</b>\n\n"
-                    f"La fecha {fecha_legible} es domingo. El salón de belleza LIZMAR no atiende los domingos.\n\n"
+                    f"La fecha {fecha_info['fecha']} ({fecha_info['dia']}) es domingo. "
+                    f"El salón de belleza LIZMAR no atiende los domingos.\n\n"
                     f"<b>Días de atención:</b> Lunes a Sábado\n"
                     f"• Mañana: 09:00 - 12:00\n"
                     f"• Tarde: 15:00 - 21:00\n\n"
@@ -447,9 +427,6 @@ async def responder_mensaje(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
             
             # Obtener horarios disponibles
-            from db.queries import get_horarios_disponibles
-            from datetime import datetime
-            
             horarios_info = get_horarios_disponibles(fecha)
             
             if not horarios_info:
@@ -458,24 +435,11 @@ async def responder_mensaje(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return
             
-            # Formatear fecha legible
-            try:
-                fecha_obj = datetime.strptime(fecha, '%Y-%m-%d')
-                fecha_legible = fecha_obj.strftime('%d/%m/%Y')
-                dia_semana = fecha_obj.strftime('%A')
-                
-                # Traducir día al español
-                dias = {
-                    'Monday': 'Lunes', 'Tuesday': 'Martes', 'Wednesday': 'Miércoles',
-                    'Thursday': 'Jueves', 'Friday': 'Viernes', 'Saturday': 'Sábado', 'Sunday': 'Domingo'
-                }
-                dia_es = dias.get(dia_semana, dia_semana)
-            except:
-                fecha_legible = fecha
-                dia_es = ""
+            # ⭐ Formatear fecha con helper
+            fecha_info = formatear_fecha_legible(fecha)
             
             # Construir mensaje
-            mensaje_respuesta = f"📅 <b>Disponibilidad para el {dia_es} {fecha_legible}:</b>\n\n"
+            mensaje_respuesta = f"📅 <b>Disponibilidad para el {fecha_info['dia']} {fecha_info['fecha']}:</b>\n\n"
             
             if not horarios_info['disponibles'] and not horarios_info['ocupados']:
                 mensaje_respuesta += "⚠️ No hay horarios de atención registrados para consultar.\n"
@@ -483,14 +447,14 @@ async def responder_mensaje(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 mensaje_respuesta += "❌ <b>Lo sentimos, no hay horarios disponibles para esta fecha.</b>\n\n"
                 mensaje_respuesta += "<b>Todos los horarios están ocupados:</b>\n"
                 for h in horarios_info['ocupados']:
-                    inicio = str(h['horaInicio'])[:5]  # Formato HH:MM
+                    inicio = str(h['horaInicio'])[:5]
                     fin = str(h['horaFin'])[:5]
                     mensaje_respuesta += f"❌ {inicio} - {fin}\n"
                 mensaje_respuesta += "\n💡 <i>¿Te gustaría consultar otro día?</i>"
             else:
                 mensaje_respuesta += "<b><i> Horarios disponibles: </i></b>\n"
                 for h in horarios_info['disponibles']:
-                    inicio = str(h['horaInicio'])[:5]  # Formato HH:MM
+                    inicio = str(h['horaInicio'])[:5]
                     fin = str(h['horaFin'])[:5]
                     mensaje_respuesta += f"✅ {inicio} - {fin}\n"
                 
@@ -524,7 +488,7 @@ def main():
     app = ApplicationBuilder().token(os.getenv('TELEGRAM_API_KEY')).build()
 
     # Agregar handlers para botones que NO inician conversación PRIMERO
-    app.add_handler(CallbackQueryHandler(button_handler, pattern='^(servicios|ubicacion|ayuda)$'))
+    app.add_handler(CallbackQueryHandler(button_handler, pattern='^(servicios|ubicacion|ayuda|consultar_horarios)$'))
 
     # ConversationHandler para consulta de citas
     conv_handler = ConversationHandler(
