@@ -14,6 +14,7 @@ from context.context import build_context
 from context.gemini_utils import extraer_fecha_con_gemini
 from helpers.date_utils import es_domingo, es_fecha_pasada, formatear_fecha_legible
 from db.queries import verificar_usuario_y_citas, get_horarios_disponibles
+from helpers.memory_manager import memory_manager
 
 from dotenv import load_dotenv
 import os
@@ -28,6 +29,9 @@ EMAIL, TELEFONO = range(2)
 
 ### COMANDO /start con menú de botones MINIMALISTA
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Resetear memoria al usar /start
+    memory_manager.clear_history(context)
+    
     keyboard = [
         [
             InlineKeyboardButton("📋 Servicios", callback_data='servicios'),
@@ -67,6 +71,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• /formaspago - Formas de pago aceptadas\n"
         "• /ubicacion - Dirección del salón\n"
         "• /miscitas - Consulta tus citas programadas\n"
+        "• /nueva - Inicia una nueva conversación (borra el historial)\n"
         "• /cancelar - Cancela una operación en curso\n\n"
         
         "<b>💬 Interacción natural:</b>\n"
@@ -74,6 +79,12 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• \"¿Cuánto cuesta un corte?\"\n"
         "• \"¿Están abiertos mañana?\"\n"
         "• \"Quiero saber sobre los servicios\"\n\n"
+        
+        "<b>🧠 Memoria conversacional:</b>\n"
+        "¡Recuerdo nuestra conversación! Puedes hacer preguntas de seguimiento:\n"
+        "• \"¿Y cuánto cuesta?\"\n"
+        "• \"¿Lo tienen disponible mañana?\"\n"
+        "• \"Dame más detalles sobre eso\"\n\n"
         
         "<b>📅 Consultar disponibilidad:</b>\n"
         "Pregúntame por horarios disponibles de forma natural:\n"
@@ -94,6 +105,18 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(mensaje, parse_mode='HTML')
 
+### Comando para iniciar nueva conversación
+async def nueva_conversacion(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Limpia el historial y comienza una nueva conversación"""
+    memory_manager.clear_history(context)
+    
+    await update.message.reply_text(
+        "🔄 <b>Conversación reiniciada</b>\n\n"
+        "He olvidado nuestra conversación anterior y comenzamos desde cero.\n\n"
+        "¿En qué puedo ayudarte ahora? 😊",
+        parse_mode='HTML'
+    )
+
 ### Handler para botones inline
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -112,7 +135,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "• /horarios - Horarios de atención\n"
             "• /formaspago - Formas de pago\n"
             "• /ubicacion - Dirección del salón\n"
-            "• /miscitas - Consulta tus citas\n\n"
+            "• /miscitas - Consulta tus citas\n"
+            "• /nueva - Nueva conversación\n\n"
             
             "<b>💬 Interacción natural:</b>\n"
             "También puedes escribirme en lenguaje natural y te responderé usando inteligencia artificial.\n\n"
@@ -326,8 +350,13 @@ async def miscitas_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ### COMANDO /ubicacion
 async def ubicacion_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.chat.send_action(action='typing')
+    
+    # Agregar mensaje del usuario a la memoria
+    memory_manager.add_message(context, 'user', '/ubicacion')
+    
     contexto = build_context()
-    orden_final = f"{contexto}\n\nUsuario: ¿Dónde está ubicado el salón?\nLIZMAR BOT:"
+    historial = memory_manager.format_for_gemini(context)
+    orden_final = f"{contexto}\n\n{historial}Usuario: ¿Dónde está ubicado el salón?\nLIZMAR BOT:"
     
     try:
         respuesta = modelo.generate_content(orden_final)
@@ -335,14 +364,21 @@ async def ubicacion_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         print(f"Error al generar respuesta: {e}")
         texto_respuesta = "⚠️ Lo siento, el servicio está temporalmente ocupado. Por favor intenta nuevamente."
+    
+    # Agregar respuesta del bot a la memoria
+    memory_manager.add_message(context, 'assistant', texto_respuesta)
     
     await update.message.reply_text(texto_respuesta, parse_mode='HTML')
 
 ### COMANDO /servicios
 async def servicios_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.chat.send_action(action='typing')
+    
+    memory_manager.add_message(context, 'user', '/servicios')
+    
     contexto = build_context()
-    orden_final = f"{contexto}\n\nUsuario: ¿Qué servicios ofrecen?\nLIZMAR BOT:"
+    historial = memory_manager.format_for_gemini(context)
+    orden_final = f"{contexto}\n\n{historial}Usuario: ¿Qué servicios ofrecen?\nLIZMAR BOT:"
     
     try:
         respuesta = modelo.generate_content(orden_final)
@@ -350,14 +386,20 @@ async def servicios_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         print(f"Error al generar respuesta: {e}")
         texto_respuesta = "⚠️ Lo siento, el servicio está temporalmente ocupado. Por favor intenta nuevamente."
+    
+    memory_manager.add_message(context, 'assistant', texto_respuesta)
     
     await update.message.reply_text(texto_respuesta, parse_mode='HTML')
 
 ### COMANDO /horarios
 async def horarios_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.chat.send_action(action='typing')
+    
+    memory_manager.add_message(context, 'user', '/horarios')
+    
     contexto = build_context()
-    orden_final = f"{contexto}\n\nUsuario: ¿Cuáles son los horarios?\nLIZMAR BOT:"
+    historial = memory_manager.format_for_gemini(context)
+    orden_final = f"{contexto}\n\n{historial}Usuario: ¿Cuáles son los horarios?\nLIZMAR BOT:"
     
     try:
         respuesta = modelo.generate_content(orden_final)
@@ -365,14 +407,20 @@ async def horarios_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         print(f"Error al generar respuesta: {e}")
         texto_respuesta = "⚠️ Lo siento, el servicio está temporalmente ocupado. Por favor intenta nuevamente."
+    
+    memory_manager.add_message(context, 'assistant', texto_respuesta)
     
     await update.message.reply_text(texto_respuesta, parse_mode='HTML')
 
 ### COMANDO /formaspago
 async def formaspago_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.chat.send_action(action='typing')
+    
+    memory_manager.add_message(context, 'user', '/formaspago')
+    
     contexto = build_context()
-    orden_final = f"{contexto}\n\nUsuario: ¿Qué formas de pago aceptan?\nLIZMAR BOT:"
+    historial = memory_manager.format_for_gemini(context)
+    orden_final = f"{contexto}\n\n{historial}Usuario: ¿Qué formas de pago aceptan?\nLIZMAR BOT:"
     
     try:
         respuesta = modelo.generate_content(orden_final)
@@ -381,12 +429,17 @@ async def formaspago_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         print(f"Error al generar respuesta: {e}")
         texto_respuesta = "⚠️ Lo siento, el servicio está temporalmente ocupado. Por favor intenta nuevamente."
     
+    memory_manager.add_message(context, 'assistant', texto_respuesta)
+    
     await update.message.reply_text(texto_respuesta, parse_mode='HTML')
 
-### RESPONDER MENSAJES (versión simplificada)
+### RESPONDER MENSAJES CON MEMORIA
 async def responder_mensaje(update: Update, context: ContextTypes.DEFAULT_TYPE):
     mensaje_usuario = update.message.text
     mensaje_lower = mensaje_usuario.lower()
+    
+    # Agregar mensaje del usuario a la memoria
+    memory_manager.add_message(context, 'user', mensaje_usuario)
     
     # Detectar si pregunta por disponibilidad/horarios libres
     palabras_clave = ['disponible', 'disponibilidad', 'horario', 'libre', 'ocupado', 'agendar', 'cuando', 'cuándo', 'espacio']
@@ -394,51 +447,46 @@ async def responder_mensaje(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if any(palabra in mensaje_lower for palabra in palabras_clave):
         await update.message.chat.send_action(action='typing')
         
-        # ⭐ Usar función refactorizada
         resultado = await extraer_fecha_con_gemini(mensaje_usuario)
         
         if resultado['encontrado'] and resultado['fecha']:
             fecha = resultado['fecha']
             
-            # ⭐ Validar si es fecha pasada
             if es_fecha_pasada(fecha):
-                await update.message.reply_text(
+                respuesta_texto = (
                     f"❌ <b>La fecha ya pasó</b>\n\n"
                     f"No puedes consultar horarios de fechas anteriores a hoy.\n\n"
-                    f"¿Te gustaría consultar otra fecha? 📅",
-                    parse_mode='HTML'
+                    f"¿Te gustaría consultar otra fecha? 📅"
                 )
+                memory_manager.add_message(context, 'assistant', respuesta_texto)
+                await update.message.reply_text(respuesta_texto, parse_mode='HTML')
                 return
             
-            # ⭐ Validar si es domingo
             if es_domingo(fecha):
                 fecha_info = formatear_fecha_legible(fecha)
-                
-                await update.message.reply_text(
+                respuesta_texto = (
                     f"❌ <b>Los domingos el salón está cerrado</b>\n\n"
                     f"La fecha {fecha_info['fecha']} ({fecha_info['dia']}) es domingo. "
                     f"El salón de belleza LIZMAR no atiende los domingos.\n\n"
                     f"<b>Días de atención:</b> Lunes a Sábado\n"
                     f"• Mañana: 09:00 - 12:00\n"
                     f"• Tarde: 15:00 - 21:00\n\n"
-                    f"¿Te gustaría consultar otro día? 📅",
-                    parse_mode='HTML'
+                    f"¿Te gustaría consultar otro día? 📅"
                 )
+                memory_manager.add_message(context, 'assistant', respuesta_texto)
+                await update.message.reply_text(respuesta_texto, parse_mode='HTML')
                 return
             
-            # Obtener horarios disponibles
             horarios_info = get_horarios_disponibles(fecha)
             
             if not horarios_info:
-                await update.message.reply_text(
-                    "⚠️ Ocurrió un error al consultar los horarios. Intenta nuevamente."
-                )
+                respuesta_texto = "⚠️ Ocurrió un error al consultar los horarios. Intenta nuevamente."
+                memory_manager.add_message(context, 'assistant', respuesta_texto)
+                await update.message.reply_text(respuesta_texto)
                 return
             
-            # ⭐ Formatear fecha con helper
             fecha_info = formatear_fecha_legible(fecha)
             
-            # Construir mensaje
             mensaje_respuesta = f"📅 <b>Disponibilidad para el {fecha_info['dia']} {fecha_info['fecha']}:</b>\n\n"
             
             if not horarios_info['disponibles'] and not horarios_info['ocupados']:
@@ -467,21 +515,28 @@ async def responder_mensaje(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 mensaje_respuesta += "\n💡 <i>Para agendar una cita, ingresa a nuestro sistema web.</i>"
             
+            memory_manager.add_message(context, 'assistant', mensaje_respuesta)
             await update.message.reply_text(mensaje_respuesta, parse_mode='HTML')
             return
     
-    # Si no es consulta de disponibilidad, respuesta normal con Gemini
+    # Si no es consulta de disponibilidad, respuesta normal con Gemini + MEMORIA
     await update.message.chat.send_action(action='typing')
     
     try:
         contexto = build_context()
-        orden_final = f"{contexto}\n\nUsuario: {mensaje_usuario}\nLIZMAR BOT:"
+        historial = memory_manager.format_for_gemini(context)
+        
+        orden_final = f"{contexto}\n\n{historial}Usuario: {mensaje_usuario}\nLIZMAR BOT:"
+        
         respuesta = modelo.generate_content(orden_final)
         texto_respuesta = respuesta.text.strip() if respuesta.text else "Lo siento, no pude generar una respuesta."
     except Exception as e:
         print(f"Error al procesar mensaje: {e}")
         texto_respuesta = "⚠️ Lo siento, el servicio está temporalmente ocupado. Por favor intenta nuevamente en unos momentos o usa los comandos del menú: /start"
 
+    # Agregar respuesta del bot a la memoria
+    memory_manager.add_message(context, 'assistant', texto_respuesta)
+    
     await update.message.reply_text(texto_respuesta, parse_mode='HTML')
 
 def main():
@@ -507,6 +562,7 @@ def main():
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("nueva", nueva_conversacion))
     app.add_handler(conv_handler)
     app.add_handler(CommandHandler("ubicacion", ubicacion_command))
     app.add_handler(CommandHandler("servicios", servicios_command))
@@ -515,6 +571,7 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, responder_mensaje))
 
     print("🤖 Bot LIZMAR iniciado correctamente...")
+    print("🧠 Sistema de memoria conversacional activado")
     print("📊 Presiona Ctrl+C para detener el bot")
     app.run_polling()
 
