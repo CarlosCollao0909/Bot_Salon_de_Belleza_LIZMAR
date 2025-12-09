@@ -41,6 +41,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("🗓️ Consultar Horarios", callback_data='consultar_horarios')
         ],
         [
+            InlineKeyboardButton("🌐 Sistema Web", url="https://salon-lizmar.domcloud.dev/")
+        ],
+        [
             InlineKeyboardButton("❓ Ayuda", callback_data='ayuda')
         ]
     ]
@@ -170,37 +173,15 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == 'consultar_horarios':
         mensaje = (
             "🗓️ <b>Consulta de Horarios Disponibles</b>\n\n"
-            "Para consultar horarios disponibles, simplemente escríbeme mencionando la fecha:\n\n"
+            "Escríbeme de forma natural la fecha que te interesa. Por ejemplo:\n\n"
             
-            "<b>📅 Formas de preguntar:</b>\n\n"
-            
-            "<i>Usando fechas relativas:</i>\n"
-            "• \"¿Hay horarios disponibles <b>mañana</b>?\"\n"
-            "• \"Disponibilidad para <b>pasado mañana</b>\"\n"
-            "• \"¿Tienes espacio <b>hoy</b>?\"\n\n"
-            
-            "<i>Usando días de la semana:</i>\n"
-            "• \"Horarios del <b>próximo sábado</b>\"\n"
-            "• \"¿Cuándo tienes libre <b>este viernes</b>?\"\n"
-            "• \"Disponibilidad el <b>martes</b>\"\n\n"
-            
-            "<i>Usando fechas específicas:</i>\n"
-            "• \"¿Hay horarios el <b>25 de noviembre</b>?\"\n"
-            "• \"Disponibilidad para el <b>19/11</b>\"\n"
+            "• \"¿Hay horarios <b>mañana</b>?\"\n"
+            "• \"Disponibilidad el <b>sábado</b>\"\n"
             "• \"Horarios del <b>15 de diciembre</b>\"\n\n"
             
-            "━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "⚠️ <b>Recuerda:</b> El salón NO atiende domingos 🚫\n\n"
             
-            "⚠️ <b>Importante:</b>\n"
-            "• El salón <b>NO atiende domingos</b> 🚫\n"
-            "• No puedo consultar fechas pasadas 📅\n"
-            "• Solo muestro disponibilidad, no agendo citas 📝\n\n"
-            
-            "━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            
-            "💡 <b>Tip:</b> Escríbeme de forma natural, yo entenderé tu pregunta.\n\n"
-            
-            "¿Qué fecha te interesa consultar? 😊"
+            "¿Qué fecha quieres consultar? 😊"
         )
     else:
         mensaje = "⚠️ Opción no reconocida."
@@ -513,10 +494,16 @@ async def responder_mensaje(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         fin = str(h['horaFin'])[:5]
                         mensaje_respuesta += f"❌ {inicio} - {fin}\n"
                 
-                mensaje_respuesta += "\n💡 <i>Para agendar una cita, ingresa a nuestro sistema web.</i>"
+                mensaje_respuesta += "\n💡 <i>Para agendar una cita, ingresa a nuestro sistema web:</i> <a href='https://salon-lizmar.domcloud.dev/'>Agendar cita</a>"
+
+            keyboard = [
+                [InlineKeyboardButton("🌐 Ir al sistema web", url="https://salon-lizmar.domcloud.dev/")],
+                [InlineKeyboardButton("📋 Ver servicios", callback_data='servicios')]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
             
             memory_manager.add_message(context, 'assistant', mensaje_respuesta)
-            await update.message.reply_text(mensaje_respuesta, parse_mode='HTML')
+            await update.message.reply_text(mensaje_respuesta, reply_markup=reply_markup, parse_mode='HTML')
             return
     
     # Si no es consulta de disponibilidad, respuesta normal con Gemini + MEMORIA

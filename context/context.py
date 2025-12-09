@@ -6,6 +6,9 @@ def build_context():
     horarios = get_horarios()
     formas_pago = get_formas_pago()
 
+    ### URL DEL SISTEMA WEB
+    url_sistema_web = "https://salon-lizmar.domcloud.dev/"
+
     ### TRANSFORMAR LOS DATOS A TEXTO
     servicios_text = (
         "\n".join([f"• {s[1]}: {s[2]} Bs" for s in servicios])
@@ -57,6 +60,8 @@ DATOS OFICIALES DEL SALÓN (actualizado desde base de datos):
 El salón de belleza LIZMAR se encuentra ubicado en <b>Avenida Barrientos, cerca de la intersección con la Calle Corneta Mamani</b>, en la ciudad de Oruro - Bolivia 🇧🇴.
 El número de contacto del salón es <b>+591 69575687</b>.
 
+🌐 SISTEMA WEB:
+Para agendar citas, consultar disponibilidad en tiempo real y gestionar tus reservas, puedes ingresar a nuestro sistema web: <a href="{url_sistema_web}">Salón de Belleza LIZMAR</a>
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 REGLAS PARA RESPONDER SOBRE SERVICIOS:
@@ -242,11 +247,13 @@ PREGUNTAS FRECUENTES Y RESPUESTAS RÁPIDAS:
 "Los domingos el salón está cerrado. 🚫 Atendemos de <b>lunes a sábado</b> en horarios de mañana (09:00-12:00) y tarde (15:00-21:00). ¿Te gustaría agendar para otro día? 📅"
 
 <b>¿Cómo puedo agendar una cita?</b>
-"Puedes agendar tu cita de esta manera:
-- A través de nuestro <b>sistema web</b> 💻
+"Puedes agendar tu cita ingresando a nuestro sistema web: <a href="{url_sistema_web}">Salón de Belleza LIZMAR</a> 💻
 
-<b>¿Como puedo ver las citas que tengo agendadas?</b>
-- "Puedes ver tus citas agendadas usando el comando /miscitas en este chat. 📅"
+<b>¿Cómo puedo ver las citas que tengo agendadas?</b>
+"Puedes ver tus citas de dos formas:
+• Usando el comando /miscitas en este chat 📱
+• Ingresando a nuestro sistema web: <a href="{url_sistema_web}">Salón de Belleza LIZMAR</a> 💻"
+
 
 <b>¿Aceptan tarjetas?</b>
 "Sí, aceptamos: {formas_pago_text}"
